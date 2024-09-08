@@ -10,7 +10,7 @@ LLM access to DeepSeek's API
 Install this plugin in the same environment as [LLM](https://llm.datasette.io/).
 
 ```bash
-llm install llm-deepseek
+llm install llm-deepseek  # Coming soon™️
 ```
 
 ## Usage
@@ -32,6 +32,7 @@ llm -m deepseekcompletion/deepseek-chat "The AI began to dream, and in its dream
 llm -m deepseek-coder "Write a Python function to sort a list of numbers"
 llm -m deepseek-coder-completion "Implement a binary search algorithm in Python"
 ```
+
 
 ## Development
 
