@@ -1,4 +1,3 @@
-
 import llm
 from llm.default_plugins.openai_models import Chat, Completion
 from pathlib import Path
@@ -8,14 +7,20 @@ import httpx
 from typing import Optional
 from pydantic import Field
 
+# Constants for cache timeout and API base URL
+CACHE_TIMEOUT = 3600
+DEEPSEEK_API_BASE = "https://api.deepseek.com/beta"
+
 def get_deepseek_models():
+    """Fetch and cache DeepSeek models."""
     return fetch_cached_json(
         url="https://api.deepseek.com/v1/models",
         path=llm.user_dir() / "deepseek_models.json",
-        cache_timeout=3600,
+        cache_timeout=CACHE_TIMEOUT,
     )["data"]
 
 def get_model_ids_with_aliases(models):
+    """Extract model IDs and create empty aliases list."""
     return [(model['id'], []) for model in models]
 
 class DeepSeekChat(Chat):
@@ -24,7 +29,7 @@ class DeepSeekChat(Chat):
 
     def __init__(self, model_id, **kwargs):
         super().__init__(model_id, **kwargs)
-        self.api_base = "https://api.deepseek.com/beta"  # Use beta API
+        self.api_base = DEEPSEEK_API_BASE
 
     def __str__(self):
         return f"DeepSeek Chat: {self.model_id}"
@@ -39,35 +44,15 @@ class DeepSeekChat(Chat):
             default=None
         )
 
-
     def execute(self, prompt, stream, response, conversation):
-        messages = []
-        if conversation is not None:
-            for prev_response in conversation.responses:
-                messages.append({"role": "user", "content": prev_response.prompt.prompt})
-                messages.append({"role": "assistant", "content": prev_response.text()})
-
-        messages.append({"role": "user", "content": prompt.prompt})
-
-        # Handle prefill option
-        if prompt.options.prefill:
-            messages.append({
-                "role": "assistant",
-                "content": prompt.options.prefill,
-                "prefix": True
-            })
-
+        messages = self._build_messages(conversation, prompt)
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
 
-        # Handle max_tokens
-        max_tokens = kwargs.pop('max_tokens', 8192)  # Default to 8192 if not specified
-
-        # Handle response_format option
+        max_tokens = kwargs.pop('max_tokens', 8192)
         if prompt.options.response_format:
             kwargs["response_format"] = {"type": prompt.options.response_format}
 
-        # Remove 'prefill' from kwargs if it's there
         kwargs.pop('prefill', None)
 
         client = self.get_client()
@@ -90,13 +75,36 @@ class DeepSeekChat(Chat):
         except httpx.HTTPError as e:
             raise llm.ModelError(f"DeepSeek API error: {str(e)}")
 
+    def _build_messages(self, conversation, prompt):
+        """Build the messages list for the API call."""
+        messages = []
+        if conversation:
+            for prev_response in conversation.responses:
+                messages.append({"role": "user", "content": prev_response.prompt.prompt})
+                messages.append({"role": "assistant", "content": prev_response.text()})
+
+        # Add system message if provided
+        if prompt.system:
+            messages.append({"role": "system", "content": prompt.system})
+
+        messages.append({"role": "user", "content": prompt.prompt})
+
+        if prompt.options.prefill:
+            messages.append({
+                "role": "assistant",
+                "content": prompt.options.prefill,
+                "prefix": True
+            })
+
+        return messages
+
 class DeepSeekCompletion(Completion):
     needs_key = "deepseek"
     key_env_var = "LLM_DEEPSEEK_KEY"
 
     def __init__(self, model_id, **kwargs):
         super().__init__(model_id, **kwargs)
-        self.api_base = "https://api.deepseek.com/beta"  # Use beta API
+        self.api_base = DEEPSEEK_API_BASE
 
     def __str__(self):
         return f"DeepSeek Completion: {self.model_id}"
@@ -112,30 +120,14 @@ class DeepSeekCompletion(Completion):
         )
 
     def execute(self, prompt, stream, response, conversation):
-        messages = []
-        if conversation is not None:
-            for prev_response in conversation.responses:
-                messages.append(prev_response.prompt.prompt)
-                messages.append(prev_response.text())
-        messages.append(prompt.prompt)
-
-        full_prompt = "\n".join(messages)
-
-        # Handle prefill option
-        if prompt.options.prefill:
-            full_prompt += f"\n{prompt.options.prefill}"
-
+        full_prompt = self._build_full_prompt(conversation, prompt)
         response._prompt_json = {"prompt": full_prompt}
         kwargs = self.build_kwargs(prompt)
 
-        # Handle max_tokens
-        max_tokens = kwargs.pop('max_tokens', 4096)  # Default to 4096 if not specified
-
-        # Handle response_format option
+        max_tokens = kwargs.pop('max_tokens', 4096)
         if prompt.options.echo:
             kwargs["echo"] = prompt.options.echo
 
-        # Remove 'prefill' from kwargs if it's there
         kwargs.pop('prefill', None)
 
         client = self.get_client()
@@ -158,10 +150,30 @@ class DeepSeekCompletion(Completion):
         except httpx.HTTPError as e:
             raise llm.ModelError(f"DeepSeek API error: {str(e)}")
 
+    def _build_full_prompt(self, conversation, prompt):
+        """Build the full prompt for the API call."""
+        messages = []
+        if conversation:
+            for prev_response in conversation.responses:
+                messages.append(prev_response.prompt.prompt)
+                messages.append(prev_response.text())
+        messages.append(prompt.prompt)
+
+        # Include system message if provided
+        if prompt.system:
+            messages.insert(0, prompt.system)
+
+        full_prompt = "\n".join(messages)
+        if prompt.options.prefill:
+            full_prompt += f"\n{prompt.options.prefill}"
+
+        return full_prompt
+
 class DownloadError(Exception):
     pass
 
 def fetch_cached_json(url, path, cache_timeout, headers=None):
+    """Fetch JSON data from a URL and cache it."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -212,7 +224,7 @@ def register_models(register):
 def register_commands(cli):
     @cli.command()
     def deepseek_models():
-        "List available DeepSeek models"
+        """List available DeepSeek models."""
         key = llm.get_key("", "deepseek", "LLM_DEEPSEEK_KEY")
         if not key:
             print("DeepSeek API key not set. Use 'llm keys set deepseek' to set it.")
