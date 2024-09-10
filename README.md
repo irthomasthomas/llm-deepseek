@@ -1,5 +1,6 @@
 # llm-deepseek
 
+[![PyPI](https://img.shields.io/pypi/v/llm-hyperbolic.svg)](https://pypi.org/project/llm-deepseek-xtreme/0.1.0/)
 [![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/ghostofpokemon/llm-deepseek?include_prereleases)](https://github.com/ghostofpokemon/llm-deepseek/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/ghostofpokemon/llm-deepseek/blob/main/LICENSE)
 
@@ -10,7 +11,7 @@ LLM access to DeepSeek's API
 Install this plugin in the same environment as [LLM](https://llm.datasette.io/).
 
 ```bash
-llm install llm-deepseek
+llm install llm-deepseek-xtreme
 ```
 
 ## Usage
