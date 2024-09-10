@@ -1,3 +1,4 @@
+
 import llm
 from llm.default_plugins.openai_models import Chat, Completion
 from pathlib import Path
@@ -28,7 +29,7 @@ class DeepSeekChat(Chat):
     def __str__(self):
         return f"DeepSeek Chat: {self.model_id}"
 
-    class Options(llm.Options):
+    class Options(Chat.Options):
         prefill: Optional[str] = Field(
             description="Initial text for the model's response (beta feature). Uses DeepSeek's Chat Prefix Completion.",
             default=None
@@ -37,6 +38,7 @@ class DeepSeekChat(Chat):
             description="Format of the response (e.g., 'json_object').",
             default=None
         )
+
 
     def execute(self, prompt, stream, response, conversation):
         messages = []
@@ -52,22 +54,21 @@ class DeepSeekChat(Chat):
             messages.append({
                 "role": "assistant",
                 "content": prompt.options.prefill,
-                "prefix": True  # Ensure the prefix parameter is set to True
+                "prefix": True
             })
 
         response._prompt_json = {"messages": messages}
         kwargs = self.build_kwargs(prompt)
 
-        # Set max_tokens to 8192 (within the valid range for Beta API)
-        kwargs["max_tokens"] = 8192
+        # Handle max_tokens
+        max_tokens = kwargs.pop('max_tokens', 8192)  # Default to 8192 if not specified
 
         # Handle response_format option
         if prompt.options.response_format:
             kwargs["response_format"] = {"type": prompt.options.response_format}
 
-        # Remove 'prefill' and 'response_format' from kwargs if they are there
+        # Remove 'prefill' from kwargs if it's there
         kwargs.pop('prefill', None)
-        kwargs.pop('response_format', None)
 
         client = self.get_client()
 
@@ -76,6 +77,7 @@ class DeepSeekChat(Chat):
                 model=self.model_name,
                 messages=messages,
                 stream=stream,
+                max_tokens=max_tokens,
                 **kwargs,
             )
 
@@ -99,13 +101,13 @@ class DeepSeekCompletion(Completion):
     def __str__(self):
         return f"DeepSeek Completion: {self.model_id}"
 
-    class Options(llm.Options):
+    class Options(Completion.Options):
         prefill: Optional[str] = Field(
             description="Initial text for the model's response (beta feature). Uses DeepSeek's Completion Prefix.",
             default=None
         )
-        response_format: Optional[str] = Field(
-            description="Format of the response (e.g., 'json_object').",
+        echo: Optional[bool] = Field(
+            description="Echo back the prompt in addition to the completion.",
             default=None
         )
 
@@ -126,16 +128,15 @@ class DeepSeekCompletion(Completion):
         response._prompt_json = {"prompt": full_prompt}
         kwargs = self.build_kwargs(prompt)
 
-        # Set max_tokens to 8192 (within the valid range for Beta API)
-        kwargs["max_tokens"] = 8192
+        # Handle max_tokens
+        max_tokens = kwargs.pop('max_tokens', 4096)  # Default to 4096 if not specified
 
         # Handle response_format option
-        if prompt.options.response_format:
-            kwargs["response_format"] = {"type": prompt.options.response_format}
+        if prompt.options.echo:
+            kwargs["echo"] = prompt.options.echo
 
-        # Remove 'prefill' and 'response_format' from kwargs if they are there
+        # Remove 'prefill' from kwargs if it's there
         kwargs.pop('prefill', None)
-        kwargs.pop('response_format', None)
 
         client = self.get_client()
 
@@ -144,6 +145,7 @@ class DeepSeekCompletion(Completion):
                 model=self.model_name,
                 prompt=full_prompt,
                 stream=stream,
+                max_tokens=max_tokens,
                 **kwargs,
             )
 
