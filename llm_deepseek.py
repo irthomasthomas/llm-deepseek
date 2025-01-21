@@ -9,14 +9,18 @@ from pydantic import Field
 
 # Constants for cache timeout and API base URL
 CACHE_TIMEOUT = 3600
-DEEPSEEK_API_BASE = "https://api.deepseek.com/beta"
+DEEPSEEK_API_BASE = "https://api.deepseek.com/beta"  # For inference
+DEEPSEEK_MODELS_URL = "https://api.deepseek.com/models"  # For listing models
 
 def get_deepseek_models():
     """Fetch and cache DeepSeek models."""
+    key = llm.get_key("", "deepseek", "LLM_DEEPSEEK_KEY")
+    headers = {"Authorization": f"Bearer {key}"} if key else None
     return fetch_cached_json(
-        url="https://api.deepseek.com/v1/models",
+        url=DEEPSEEK_MODELS_URL,
         path=llm.user_dir() / "deepseek_models.json",
         cache_timeout=CACHE_TIMEOUT,
+        headers=headers
     )["data"]
 
 def get_model_ids_with_aliases(models):
