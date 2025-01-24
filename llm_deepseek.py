@@ -51,7 +51,7 @@ class DeepSeekChat(Chat):
     def execute(self, prompt, stream, response, conversation):
         messages = self._build_messages(conversation, prompt)
         response._prompt_json = {"messages": messages}
-        kwargs = self.build_kwargs(prompt)
+        kwargs = self.build_kwargs(prompt, stream)
 
         max_tokens = kwargs.pop('max_tokens', 8192)
         if prompt.options.response_format:
@@ -126,7 +126,7 @@ class DeepSeekCompletion(Completion):
     def execute(self, prompt, stream, response, conversation):
         full_prompt = self._build_full_prompt(conversation, prompt)
         response._prompt_json = {"prompt": full_prompt}
-        kwargs = self.build_kwargs(prompt)
+        kwargs = self.build_kwargs(prompt, stream)
 
         max_tokens = kwargs.pop('max_tokens', 4096)
         if prompt.options.echo:
