@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import time
 import httpx
-from typing import Optional
+from typing import Optional, Union  # added for logprobs type
 from pydantic import Field
 
 # Constants for cache timeout and API base URL
@@ -47,6 +47,15 @@ class DeepSeekChat(Chat):
             description="Format of the response (e.g., 'json_object').",
             default=None
         )
+        logprobs: Optional[Union[bool, int]] = Field(
+            description="Include the log probabilities on a per-token basis",
+            default=None,
+        )
+        top_logprobs: Optional[int] = Field(
+            description="How many top log probabilities to return per token (1-5)",
+            default=None,
+            le=5,
+        )
 
     def execute(self, prompt, stream, response, conversation):
         messages = self._build_messages(conversation, prompt)
@@ -70,12 +79,18 @@ class DeepSeekChat(Chat):
                 **kwargs,
             )
 
+            chunks = []
             for chunk in completion:
-                content = chunk.choices[0].delta.content
+                chunks.append(chunk)
+                try:
+                    content = chunk.choices[0].delta.content
+                except (IndexError, AttributeError):
+                    content = None
                 if content is not None:
                     yield content
 
-            response.response_json = {"content": "".join(response._chunks)}
+            combined = combine_chunks(chunks)
+            response.response_json = remove_dict_none_values(combined)
         except httpx.HTTPError as e:
             raise llm.ModelError(f"DeepSeek API error: {str(e)}")
 
@@ -122,6 +137,15 @@ class DeepSeekCompletion(Completion):
             description="Echo back the prompt in addition to the completion.",
             default=None
         )
+        logprobs: Optional[Union[bool, int]] = Field(
+            description="Include the log probabilities on a per-token basis",
+            default=None,
+        )
+        top_logprobs: Optional[int] = Field(
+            description="How many top log probabilities to return per token (1-5)",
+            default=None,
+            le=5,
+        )
 
     def execute(self, prompt, stream, response, conversation):
         full_prompt = self._build_full_prompt(conversation, prompt)
@@ -145,12 +169,18 @@ class DeepSeekCompletion(Completion):
                 **kwargs,
             )
 
+            chunks = []
             for chunk in completion:
-                text = chunk.choices[0].text
+                chunks.append(chunk)
+                try:
+                    text = chunk.choices[0].text
+                except (IndexError, AttributeError):
+                    text = None
                 if text:
                     yield text
 
-            response.response_json = {"content": "".join(response._chunks)}
+            combined = combine_chunks(chunks)
+            response.response_json = remove_dict_none_values(combined)
         except httpx.HTTPError as e:
             raise llm.ModelError(f"DeepSeek API error: {str(e)}")
 
